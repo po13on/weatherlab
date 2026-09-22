@@ -1,0 +1,94 @@
+{
+  "meta": {
+    "kind": "synthetic_success_trace",
+    "not_production": true,
+    "job_id": "job-001",
+    "question": "为什么 afno_wmse 的 TS@1.0 升了，TS@5.0 没有？",
+    "scope": {
+      "exp_ids": ["exp-base-convlstm", "exp-afno", "exp-afno-wmse"]
+    }
+  },
+  "steps": [
+    {
+      "step": 1,
+      "tool": "list_runs",
+      "args": {"exp_ids": ["exp-base-convlstm", "exp-afno", "exp-afno-wmse"]},
+      "observation_ref": "obs-1",
+      "facts_written": [
+        "9 succeeded runs, 3 seeds each, no failed run in scope"
+      ]
+    },
+    {
+      "step": 2,
+      "tool": "get_config_diff",
+      "args": {"left_exp": "exp-afno", "right_exp": "exp-afno-wmse"},
+      "observation_ref": "obs-2",
+      "facts_written": [
+        "backbone both afno",
+        "only loss changed: mse -> weighted_mse",
+        "has_correction_head both false"
+      ]
+    },
+    {
+      "step": 3,
+      "tool": "compare_metrics",
+      "args": {"exp_ids": ["exp-afno", "exp-afno-wmse"], "metric": "ts_1.0"},
+      "observation_ref": "obs-3",
+      "facts_written": [
+        "exp-afno ts_1.0 mean=0.410 n=3",
+        "exp-afno-wmse ts_1.0 mean=0.470 n=3",
+        "relative +14.6%",
+        "same_direction_across_seeds=true"
+      ]
+    },
+    {
+      "step": 4,
+      "tool": "compare_metrics",
+      "args": {"exp_ids": ["exp-afno", "exp-afno-wmse"], "metric": "ts_5.0"},
+      "observation_ref": "obs-4",
+      "facts_written": [
+        "both ts_5.0 mean=0.200 n=3",
+        "relative +0.0%"
+      ]
+    },
+    {
+      "step": 5,
+      "tool": "finalize_report",
+      "args": {
+        "claims": [
+          {
+            "kind": "fact",
+            "text": "AFNO+weighted MSE 相对 AFNO+MSE，TS@1.0 均值从 0.410 升到 0.470（+14.6%），三种子同向。",
+            "evidence_ids": ["obs-3"]
+          },
+          {
+            "kind": "fact",
+            "text": "同一对比下 TS@5.0 均值都是 0.200，相对变化 0%。",
+            "evidence_ids": ["obs-4"]
+          },
+          {
+            "kind": "fact",
+            "text": "两组唯一配置差是 loss: mse vs weighted_mse。",
+            "evidence_ids": ["obs-2"]
+          },
+          {
+            "kind": "inference",
+            "text": "加权损失更偏向中雨阈值，可以解释 TS@1.0 上升而 TS@5.0 不动；这不是骨干网更换。",
+            "evidence_ids": ["obs-2", "obs-3", "obs-4"]
+          },
+          {
+            "kind": "open_question",
+            "text": "fixture 没有分阈值的损失权重表，不能断言权值具体如何设置。",
+            "evidence_ids": []
+          }
+        ]
+      },
+      "critic": {
+        "result": "pass",
+        "note": "facts and inference all point to tool observations; open_question has no evidence pointer by design"
+      }
+    }
+  ],
+  "verdict": "supported",
+  "result_version": 1
+}

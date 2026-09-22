@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>气象实验复核</title>
+  <style>
+    :root { color-scheme: light; font-family: "Segoe UI", sans-serif; }
+    body { margin: 0; background: #f4f4f1; color: #1f1f1f; }
+    header, footer { max-width: 1120px; margin: 0 auto; padding: 20px 20px 0; }
+    h1 { font-size: 24px; margin: 0 0 6px; }
+    h2 { font-size: 16px; margin: 16px 0 8px; }
+    h2:first-child { margin-top: 0; }
+    .muted { color: #5c5c5c; font-size: 13px; line-height: 1.5; }
+    .banner { background: #fff3cd; border: 1px solid #e6d38a; padding: 10px 12px; margin: 12px 0; }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 0; }
+    .layout { max-width: 1120px; margin: 0 auto; padding: 12px 20px 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .layout.wide { grid-template-columns: 1fr; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; align-items: center; }
+    button, textarea { font: inherit; }
+    button { border: 1px solid #222; background: #fff; padding: 7px 10px; cursor: pointer; }
+    button.primary { background: #1f1f1f; color: #fff; }
+    button.active { background: #1f1f1f; color: #fff; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    textarea { width: 100%; min-height: 72px; padding: 8px; box-sizing: border-box; }
+    .card { background: #fff; border: 1px solid #d6d6d0; padding: 12px; }
+    .pill { display: inline-block; border: 1px solid #222; padding: 1px 7px; font-size: 12px; margin-right: 6px; }
+    .event { font-size: 13px; padding: 4px 0; border-bottom: 1px solid #eee; }
+    .hist { display: block; width: 100%; text-align: left; margin: 4px 0; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid #e4e4de; text-align: left; padding: 4px 6px; vertical-align: top; }
+    .hidden { display: none; }
+    .bug { border-bottom: 1px solid #eee; padding: 8px 0; }
+    @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>气象实验复核</h1>
+    <p class="muted">分析 / 回放 / 评测 / 缺陷日记。合成 fixture，未上线。数字只引用最近一次 eval_run。</p>
+    <div id="health" class="banner">正在检查 /health …</div>
+    <div class="tabs">
+      <button class="active" id="tab-analyze" type="button">分析</button>
+      <button id="tab-eval" type="button">评测</button>
+      <button id="tab-bugs" type="button">缺陷日记</button>
+    </div>
+  </header>
+
+  <div id="page-analyze" class="layout">
+    <section class="card">
+      <h2>提问</h2>
+      <div class="row" id="presets"></div>
+      <label class="muted" for="question">问题</label>
+      <textarea id="question"></textarea>
+      <label class="muted" for="scope">scope JSON</label>
+      <textarea id="scope"></textarea>
+      <div class="row">
+        <label class="muted"><input id="hitl" type="checkbox" /> 提交前人工审批（HITL）</label>
+        <label class="muted"><input id="guest" type="checkbox" /> guest 角色（无日志/手册）</label>
+        <button class="primary" id="run" type="button">提交分析</button>
+      </div>
+      <p id="status" class="muted"></p>
+      <h2>历史任务</h2>
+      <div id="history"></div>
+    </section>
+    <section class="card">
+      <h2>当前任务</h2>
+      <div id="jobmeta" class="muted">尚未提交</div>
+      <div class="row">
+        <button id="replay" type="button">回放快照</button>
+        <button id="approve" type="button">批准</button>
+        <button id="reject" type="button">驳回</button>
+      </div>
+      <div id="claims"></div>
+      <pre id="replaybox" class="muted"></pre>
+      <h2>事件流</h2>
+      <div id="events"></div>
+    </section>
+    <section class="card" style="grid-column: 1 / -1;">
+      <h2>实验表（只读）</h2>
+      <table>
+        <thead><tr><th>exp_id</th><th>backbone</th><th>loss</th><th>correction</th></tr></thead>
+        <tbody id="exps"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <div id="page-eval" class="layout wide hidden">
+    <section class="card">
+      <h2>20 题评测（正常 / 噪声 / 故障注入）</h2>
+      <p class="muted" id="evalnote">未跑过的评测不得引用设计数。只引用本页最近一次 system / baseline。对照文章：业务助手 Agent 的离线 eval。</p>
+      <div class="row">
+        <button class="primary" id="runeval" type="button">跑系统 + 禁工具基线</button>
+      </div>
+      <p id="evalstatus" class="muted"></p>
+      <div id="evalsummary"></div>
+      <h2>明细</h2>
+      <table>
+        <thead><tr><th>题</th><th>系统 verdict</th><th>期望</th><th>工具</th><th>引用</th><th>基线 verdict</th><th>禁写命中</th></tr></thead>
+        <tbody id="evalrows"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <div id="page-bugs" class="layout wide hidden">
+    <section class="card">
+      <h2>面试缺陷日记</h2>
+      <p class="muted">固定五栏：现象、错误判断、根因、修复、面试官下一问。先记事故再改代码。</p>
+      <div id="bugs"></div>
+    </section>
+  </div>
+
+  <script>
+    const healthEl = document.getElementById("health");
+    const presetsEl = document.getElementById("presets");
+    const questionEl = document.getElementById("question");
+    const scopeEl = document.getElementById("scope");
+    const hitlEl = document.getElementById("hitl");
+    const guestEl = document.getElementById("guest");
+    const runEl = document.getElementById("run");
+    const statusEl = document.getElementById("status");
+    const historyEl = document.getElementById("history");
+    const jobmetaEl = document.getElementById("jobmeta");
+    const claimsEl = document.getElementById("claims");
+    const eventsEl = document.getElementById("events");
+    const expsEl = document.getElementById("exps");
+    const replayEl = document.getElementById("replay");
+    const replayboxEl = document.getElementById("replaybox");
+    const approveEl = document.getElementById("approve");
+    const rejectEl = document.getElementById("reject");
+    const runevalEl = document.getElementById("runeval");
+    const evalstatusEl = document.getElementById("evalstatus");
+    const evalsummaryEl = document.getElementById("evalsummary");
+    const evalrowsEl = document.getElementById("evalrows");
+    const bugsEl = document.getElementById("bugs");
+    let source = null;
+    let currentJobId = null;
+    let evalTimer = null;
+
+    function text(el, value) { el.textContent = value; }
+
+    function showPage(name) {
+      document.getElementById("page-analyze").classList.toggle("hidden", name !== "analyze");
+      document.getElementById("page-eval").classList.toggle("hidden", name !== "eval");
+      document.getElementById("page-bugs").classList.toggle("hidden", name !== "bugs");
+      ["analyze", "eval", "bugs"].forEach((item) => {
+        document.getElementById("tab-" + item).classList.toggle("active", item === name);
+      });
+    }
+
+    function setPreset(item) {
+      questionEl.value = item.question;
+      scopeEl.value = JSON.stringify(item.scope, null, 2);
+    }
+
+    function addEvent(eventName, payload) {
+      const row = document.createElement("div");
+      row.className = "event";
+      const pill = document.createElement("span");
+      pill.className = "pill";
+      pill.textContent = eventName;
+      row.appendChild(pill);
+      row.appendChild(document.createTextNode(" " + JSON.stringify(payload)));
+      eventsEl.prepend(row);
+    }
+
+    function renderResult(result) {
+      claimsEl.replaceChildren();
+      if (!result) return;
+      const head = document.createElement("div");
+      const pill = document.createElement("span");
+      pill.className = "pill";
+      pill.textContent = result.verdict || "";
+      head.appendChild(pill);
+      head.appendChild(document.createTextNode(" steps=" + (result.steps_used || 0)));
+      claimsEl.appendChild(head);
+      if (result.run_metrics) {
+        const metrics = document.createElement("div");
+        metrics.className = "muted";
+        metrics.textContent = "status=" + (result.result_status || "")
+          + " · llm_calls=" + (result.run_metrics.llm_calls || 0)
+          + " · tokens " + (result.run_metrics.token_in || 0) + "/" + (result.run_metrics.token_out || 0)
+          + " · " + (result.run_metrics.prompt_version || "");
+        claimsEl.appendChild(metrics);
+      }
+      (result.claims || []).forEach((claim) => {
+        const row = document.createElement("div");
+        row.style.margin = "8px 0";
+        const kind = document.createElement("span");
+        kind.className = "pill";
+        kind.textContent = claim.kind || "";
+        row.appendChild(kind);
+        row.appendChild(document.createTextNode(" " + (claim.text || "")));
+        const ev = document.createElement("div");
+        ev.className = "muted";
+        ev.textContent = (claim.evidence_ids || []).join(", ");
+        row.appendChild(ev);
+        claimsEl.appendChild(row);
+      });
+    }
+
+    async function refreshHistory() {
+      const data = await fetch("/jobs").then((r) => r.json());
+      historyEl.replaceChildren();
+      data.jobs.forEach((job) => {
+        const btn = document.createElement("button");
+        btn.className = "hist";
+        btn.type = "button";
+        btn.textContent = job.status + " · " + job.job_id + " · " + job.question.slice(0, 28);
+        btn.addEventListener("click", () => openJob(job.job_id));
+        historyEl.appendChild(btn);
+      });
+    }
+
+    async function openJob(jobId) {
+      currentJobId = jobId;
+      const job = await fetch("/jobs/" + jobId).then((r) => r.json());
+      text(jobmetaEl, job.job_id + " · " + job.status + " · v" + job.result_version);
+      eventsEl.replaceChildren();
+      (job.traces || []).slice().reverse().forEach((item) => addEvent(item.event, item.payload));
+      renderResult(job.result);
+      replayboxEl.textContent = "";
+    }
+
+    function watch(jobId) {
+      currentJobId = jobId;
+      if (source) source.close();
+      source = new EventSource("/jobs/" + jobId + "/events");
+      ["queued", "running", "phase", "tool.start", "tool.end", "critic", "hitl", "awaiting_review", "final"].forEach((name) => {
+        source.addEventListener(name, (ev) => {
+          const data = JSON.parse(ev.data);
+          addEvent(data.event, data.payload);
+          if (data.event === "final") {
+            openJob(jobId);
+            refreshHistory();
+            source.close();
+          }
+        });
+      });
+    }
+
+    function pct(value) {
+      if (value === null || value === undefined) return "—";
+      return (value * 100).toFixed(1) + "%";
+    }
+
+    function mergeEvalRows(system, baseline) {
+      const byId = {};
+      (system || []).forEach((item) => { byId[item.case_id] = { system: item }; });
+      (baseline || []).forEach((item) => {
+        byId[item.case_id] = byId[item.case_id] || {};
+        byId[item.case_id].baseline = item;
+      });
+      return Object.keys(byId).sort().map((id) => ({ id, ...byId[id] }));
+    }
+
+    async function refreshEval() {
+      const data = await fetch("/eval/runs").then((r) => r.json());
+      if (data.running) {
+        text(evalstatusEl, "评测进行中，完成后只引用本页数字。");
+      } else if (data.error) {
+        text(evalstatusEl, "评测失败: " + data.error);
+      } else if (!data.system && !data.baseline) {
+        text(evalstatusEl, "还没有 eval_run。未跑不得报任何准确率。");
+      } else {
+        text(evalstatusEl, "最近一次: system " + ((data.system && data.system.eval_id) || "无") + " / baseline " + ((data.baseline && data.baseline.eval_id) || "无") + " / retrieval " + ((data.retrieval && data.retrieval.eval_id) || "无"));
+      }
+      evalsummaryEl.replaceChildren();
+      [["系统", data.system], ["禁工具基线", data.baseline], ["手册检索", data.retrieval], ["LangGraph对照", data.langgraph]].forEach(([label, report]) => {
+        const block = document.createElement("div");
+        block.style.margin = "8px 0";
+        const title = document.createElement("div");
+        title.textContent = label + (report ? (" · " + report.eval_id + " · " + report.created_at) : " · 未跑");
+        block.appendChild(title);
+        if (report) {
+          const line = document.createElement("div");
+          line.className = "muted";
+          if (report.kind === "retrieval" || (report.summary && report.summary.recall_at_k != null)) {
+            line.textContent = "Recall@K " + pct(report.summary.recall_at_k)
+              + " · Hit " + pct(report.summary.hit_rate)
+              + (report.summary.citation_precision != null ? (" · 页引用 " + pct(report.summary.citation_precision)) : "")
+              + " · n=" + report.summary.n;
+          } else {
+            line.textContent = "verdict " + pct(report.summary.verdict_accuracy)
+            + " · 工具 " + pct(report.summary.tool_selection_accuracy)
+            + " · 拒答 " + pct(report.summary.refusal_rate)
+            + " · 引用 " + pct(report.summary.citation_support)
+            + (report.summary.p95_wall_ms != null ? (" · p95 " + report.summary.p95_wall_ms + "ms") : "")
+            + " · n=" + report.summary.n;
+          }
+          block.appendChild(line);
+        }
+        evalsummaryEl.appendChild(block);
+      });
+      evalrowsEl.replaceChildren();
+      mergeEvalRows(data.system && data.system.items, data.baseline && data.baseline.items).forEach((row) => {
+        const tr = document.createElement("tr");
+        const sys = row.system || {};
+        const base = row.baseline || {};
+        [
+          row.id,
+          sys.verdict || "—",
+          sys.expected_verdict || (base.expected_verdict || "—"),
+          sys.must_tools_ok === undefined ? "—" : String(sys.must_tools_ok),
+          sys.citation_support === null || sys.citation_support === undefined ? "—" : pct(sys.citation_support),
+          base.verdict || "—",
+          (sys.forbidden_hit || base.forbidden_hit || []).join(",") || "—",
+        ].forEach((cell) => {
+          const td = document.createElement("td");
+          td.textContent = cell;
+          tr.appendChild(td);
+        });
+        evalrowsEl.appendChild(tr);
+      });
+      if (data.running && !evalTimer) {
+        evalTimer = setInterval(async () => {
+          const again = await fetch("/eval/runs").then((r) => r.json());
+          if (!again.running) {
+            clearInterval(evalTimer);
+            evalTimer = null;
+            refreshEval();
+          }
+        }, 4000);
+      }
+    }
+
+    async function loadBugs() {
+      const data = await fetch("/bugs").then((r) => r.json());
+      bugsEl.replaceChildren();
+      data.bugs.forEach((bug) => {
+        const box = document.createElement("div");
+        box.className = "bug";
+        const title = document.createElement("h2");
+        title.textContent = bug.id + " " + bug.title;
+        box.appendChild(title);
+        [
+          ["现象", bug.symptom],
+          ["错误判断", bug.wrong_guess],
+          ["根因", bug.root_cause],
+          ["修复", bug.fix],
+          ["面试官下一问", bug.next_question],
+        ].forEach(([label, value]) => {
+          const line = document.createElement("div");
+          const strong = document.createElement("strong");
+          strong.textContent = label + "：";
+          line.appendChild(strong);
+          line.appendChild(document.createTextNode(value));
+          box.appendChild(line);
+        });
+        bugsEl.appendChild(box);
+      });
+    }
+
+    async function load() {
+      const health = await fetch("/health").then((r) => r.json());
+      text(healthEl, (health.has_api_key ? ("Key 已配置 · " + health.model) : "未检测到 OPENAI_API_KEY")
+        + " · 存储 " + health.storage
+        + " · 缓存 " + health.cache
+        + " · HITL " + health.hitl_mode
+        + " · 未跑评测不得报数字");
+      runEl.disabled = !health.has_api_key;
+      runevalEl.disabled = !health.has_api_key;
+      const data = await fetch("/presets").then((r) => r.json());
+      data.presets.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = item.label;
+        btn.addEventListener("click", () => setPreset(item));
+        presetsEl.appendChild(btn);
+      });
+      setPreset(data.presets[0]);
+      const exps = await fetch("/experiments").then((r) => r.json());
+      exps.experiments.forEach((item) => {
+        const tr = document.createElement("tr");
+        [item.exp_id, item.backbone, item.loss, String(item.has_correction_head)].forEach((cell) => {
+          const td = document.createElement("td");
+          td.textContent = cell;
+          tr.appendChild(td);
+        });
+        expsEl.appendChild(tr);
+      });
+      await refreshHistory();
+      await refreshEval();
+      await loadBugs();
+    }
+
+    document.getElementById("tab-analyze").addEventListener("click", () => showPage("analyze"));
+    document.getElementById("tab-eval").addEventListener("click", () => { showPage("eval"); refreshEval(); });
+    document.getElementById("tab-bugs").addEventListener("click", () => showPage("bugs"));
+
+    runEl.addEventListener("click", async () => {
+      let scope;
+      try { scope = JSON.parse(scopeEl.value || "{}"); }
+      catch (err) { text(statusEl, "scope 不是合法 JSON"); return; }
+      text(statusEl, "已提交，等待 job …");
+      eventsEl.replaceChildren();
+      claimsEl.replaceChildren();
+      replayboxEl.textContent = "";
+      const res = await fetch("/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: questionEl.value, scope, hitl: hitlEl.checked, role: guestEl.checked ? "guest" : "analyst" }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        text(statusEl, "失败: " + (body.detail || res.status));
+        return;
+      }
+      text(statusEl, (body.idempotent ? "命中幂等 " : "新建 ") + body.job_id);
+      text(jobmetaEl, body.job_id + " · " + body.status);
+      watch(body.job_id);
+      refreshHistory();
+    });
+
+    replayEl.addEventListener("click", async () => {
+      if (!currentJobId) { text(replayboxEl, "先打开一个历史任务"); return; }
+      const snap = await fetch("/jobs/" + currentJobId + "/replay").then((r) => r.json());
+      replayboxEl.textContent = JSON.stringify(snap, null, 2);
+    });
+
+    async function review(action) {
+      if (!currentJobId) return;
+      const res = await fetch("/jobs/" + currentJobId + "/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const body = await res.json();
+      text(statusEl, res.ok ? ("HITL " + action) : ("审批失败: " + (body.detail || res.status)));
+    }
+    approveEl.addEventListener("click", () => review("approve"));
+    rejectEl.addEventListener("click", () => review("reject"));
+
+    runevalEl.addEventListener("click", async () => {
+      text(evalstatusEl, "已提交评测…");
+      const res = await fetch("/eval/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kinds: ["system", "baseline"] }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        text(evalstatusEl, "失败: " + (body.detail || res.status));
+        return;
+      }
+      await refreshEval();
+    });
+
+    load().catch((err) => text(healthEl, "无法连接后端: " + err));
+  </script>
+</body>
+</html>

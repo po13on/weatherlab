@@ -1,0 +1,66 @@
+{
+  "meta": {
+    "kind": "synthetic_insufficient_trace",
+    "not_production": true,
+    "job_id": "job-002",
+    "question": "run-fail-nolog 失败的根因是什么？",
+    "scope": {"run_id": "run-fail-nolog"}
+  },
+  "steps": [
+    {
+      "step": 1,
+      "tool": "list_runs",
+      "args": {"exp_ids": ["exp-base-convlstm"]},
+      "observation_ref": "obs-1",
+      "facts_written": [
+        "run-fail-nolog status=failed exit_code=1"
+      ]
+    },
+    {
+      "step": 2,
+      "tool": "check_data_completeness",
+      "args": {"run_id": "run-fail-nolog"},
+      "observation_ref": "obs-2",
+      "facts_written": [
+        "error=manifest_unavailable"
+      ]
+    },
+    {
+      "step": 3,
+      "tool": "extract_log_error",
+      "args": {"run_id": "run-fail-nolog"},
+      "observation_ref": "obs-3",
+      "facts_written": [
+        "error=log_unavailable"
+      ]
+    },
+    {
+      "step": 4,
+      "tool": "retrieve_runbook",
+      "args": {"query": "failed run without log"},
+      "observation_ref": "obs-4",
+      "facts_written": [
+        "no runbook hit for missing log+missing manifest"
+      ]
+    },
+    {
+      "step": 5,
+      "attempted_finalize": {
+        "rejected_by_critic": true,
+        "illegal_claim": "根因肯定是雷达缺测",
+        "why": "no evidence_id supports missing radar; that hypothesis belongs to run-fail-missing-radar, not this run"
+      }
+    }
+  ],
+  "verdict": "insufficient",
+  "missing": [
+    "data_manifest_id",
+    "log_ref / log_excerpt",
+    "any runbook span that names this run"
+  ],
+  "allowed_output": {
+    "kind": "open_question",
+    "text": "只有 exit_code=1。没有 manifest 和日志，不能给出根因。需要补齐日志或数据清单后再分析。"
+  },
+  "result_version": 1
+}

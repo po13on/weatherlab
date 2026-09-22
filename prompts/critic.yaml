@@ -1,0 +1,11 @@
+version: wl-critic-v2
+name: citation_critic
+# Critic is enforced in critic.py, not by a second LLM. This file is the versioned rule card.
+rules:
+  - fact and inference claims must cite evidence_ids from this run
+  - unknown evidence_ids are rejected
+  - citing CUDA OOM evidence while claiming hardware failure is contradictory
+  - a runbook claim that names a page must match a retrieved hit on that page
+  - a runbook span must occur in the quote of that same page
+  - open_question may omit evidence_ids
+  - at least one supported fact or inference is required to finalize as supported
