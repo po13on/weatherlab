@@ -4,6 +4,8 @@
 
 检索默认用哈希嵌入。`eval` 和 `recall-docvqa` 打出来的召回是这一次检索的计数，不是 Qwen 的成绩。
 
+本地 Qwen3-8B 的主路径是下面这份 DocVQA 1000 问，计分是 ANLS。那不是 DocVQA 2026，也不是检索召回。
+
 ## 安装
 
 需要 Python 3.10 或更高版本。
@@ -58,39 +60,39 @@ python3 -m venv .venv
 
 ## recall-docvqa
 
-这是另一条已经存在的命令，做的是旧 DocVQA 文本子集上的哈希嵌入检索 Recall。它不看图，不算 ANLS，也不是下面的 Qwen 准确率。
+这是另一条已经存在的命令，做的是旧 DocVQA 文本子集上的哈希嵌入检索 Recall。它不看图，不算 ANLS，也不是 Qwen 的成绩。此前在全部 1000 问上的 Recall@4 是 554/1000，那个数是检索召回，不要把它当成 ANLS。
 
 ```bash
 .venv/bin/python -m btom_pdf_agent recall-docvqa --rows /tmp/docvqa/rows_0_100.json --out /tmp/docvqa/run_rules
 ```
 
-默认就读这两个路径。文件不在时，命令会说明没有编造金标。
+默认就读这两个路径，用的是前 100 问。文件不在时，命令会说明没有编造金标。
 
-## 在有显卡的机器上用本地 Qwen3-8B 测 DocVQA 2026
+## 在有显卡的机器上用本地 Qwen3-8B 测 DocVQA（1000 问）
 
-脚本是 `scripts/qwen3_8b_docvqa2026.py`。Qwen3-8B 是文本模型，不能看图。输入是已经做好的 OCR 页面文本，不是 PNG。本仓库不带权重，也不带验证集。不要在没有显卡的机器上下载或运行这个模型。
+这是主路径。数据是 Hugging Face `nielsr/docvqa_1200_examples` 的 train 全部 1000 问，和算出检索 Recall@4 554/1000 的是同一批问题。不是官方 DocVQA 验证集，也不是 DocVQA 2026。
 
-准备：
+数据已经在仓库里：
 
-- 本地 Qwen3-8B 文本权重目录，用 `--weights` 传入。视觉版权重会被拒绝。
-- 官方评测文件：克隆 [VLR-CVC/DocVQA2026](https://github.com/VLR-CVC/DocVQA2026)，把其中的 `eval_utils.py` 传给 `--eval-utils`。计分调用该文件里的 `evaluate_docvqa_prediction`，不在这里重写规则。
-- 验证集 parquet：Hugging Face `VLR-CVC/DocVQA-2026` 的 `val.parquet`，传给 `--parquet`。脚本只读 `doc_id`、`doc_category`、`questions`、`answers`，不读页面图像。
-- OCR 文本：`--ocr-root` 下每个 `doc_id` 一个目录，页文件名为 `p0000.txt`、`p0001.txt`，按文件名排序。
+`pdf-agent/docvqa/nielsr_docvqa_1200_examples_train.jsonl`
 
-模型输出里必须有字面量 `FINAL ANSWER:`。官方函数会取最后一次出现之后的文本来和金标比较。没有这个标记就判错。脚本不会事后补上这个前缀。
+每一行有 `id`、英文 `question`、金标 `answers`、这一页的 `page_text`（数据集里的词用空格连起来）。没有页面图片。Qwen3-8B 是文本模型，不能看图。脚本只把 `page_text` 送给模型。
 
-有显卡的机器上先另装依赖，再运行：
+554/1000 是当时哈希嵌入检索的 Recall@4。下面这个脚本打印的是 ANLS，两件事不能混用。
+
+ANLS 的算法：送进公式的模型答案，是新生成文本去掉 `<think>` 块、再去掉首尾空白之后的部分。对这个答案和每一个金标，先转成小写并去掉首尾空白，再算归一化编辑相似度。编辑距离记为 Lev，归一化距离 NL = Lev / max(两边长度)；两边都是空串时 NL = 0。NL < 0.5 时，相似度是 1 − NL，否则这个金标记 0。一题取各金标相似度里的最大值。ANLS 是全部问题这个最大值的平均。
+
+有显卡的机器上先另装依赖。`--weights` 指向本机已经放好的 Qwen3-8B 文本权重目录。视觉权重会直接拒绝。脚本强制离线，不会下载模型。不要在没有显卡的机器上下载或运行 Qwen。
 
 ```bash
-.venv/bin/pip install torch transformers accelerate pyarrow python-Levenshtein python-dateutil
-.venv/bin/python scripts/qwen3_8b_docvqa2026.py \
+.venv/bin/pip install torch transformers accelerate
+.venv/bin/python scripts/qwen3_8b_docvqa.py \
   --weights /path/to/Qwen3-8B \
-  --eval-utils /path/to/DocVQA2026/eval_utils.py \
-  --parquet /path/to/val.parquet \
-  --ocr-root /path/to/ocr \
-  --out runs/qwen3-8b-docvqa2026
+  --out runs/qwen3-8b-docvqa
 ```
 
-`--max-ocr-chars` 默认 24000，超长 OCR 会截断并在结果里标明。`--limit` 只跑前 N 问。脚本强制离线加载权重。
+数据路径不用再传，脚本默认读上面那个 jsonl。`--limit` 只跑前 N 问。`--max-page-chars` 默认 24000；这份数据最长一页不到 8000 字符，默认不会截断。终端打印 `ANLS 小数（问数）`。
 
-终端打印 `Accuracy 判对数/问数`，以及各领域的同样计数。这个 Accuracy 只来自官方函数。它不是 `eval` 或 `recall-docvqa` 的哈希嵌入召回。
+## 不建议用 8B 测 DocVQA 2026
+
+DocVQA 2026 要看页面图像，官方计分是 Accuracy，不是上面的 ANLS。Qwen3-8B 不能看图，不建议用它测 2026。仓库里不放 2026 的 parquet，也不放页面图片。`scripts/qwen3_8b_docvqa2026.py` 还在，但那不是这条 1000 问的主路径。
