@@ -1,0 +1,38 @@
+{
+  "run_id": "demo-open-001",
+  "mode": "open",
+  "model_name": "local-fixture",
+  "active_frontier": ["A-", "V", "QK_I"],
+  "frontier_history": [
+    {"after": "open_seed", "frontier": ["A-", "V"]},
+    {"after": "expand", "frontier": ["A-", "V", "QK_I"]}
+  ],
+  "stop_reason": "roles_complete_self_attention",
+  "report_fields": {
+    "stop_text": "角色齐且只剩自注意力。",
+    "frontier_line": "open_seed ['A-', 'V']；expand ['A-', 'V', 'QK_I']"
+  },
+  "report": "可视化审阅只留下注意力截图，账本仍以节点角色表为准。",
+  "role_ledger": [
+    {
+      "layer": 3,
+      "head": 7,
+      "pattern": "A-->V",
+      "node_type": "attn_v",
+      "active_frontier": ["A-", "V"],
+      "role": "Answer value reader",
+      "note": "该头从答案位置读取 V，并不对齐 QK_I。",
+      "pattern_score": null
+    },
+    {
+      "layer": 5,
+      "head": 2,
+      "pattern": "A-->QK_I",
+      "node_type": "attn_q",
+      "active_frontier": ["A-", "V", "QK_I"],
+      "role": "Query Item aligner",
+      "note": "该头把查询对齐到 QK_I，而不是去读 V。",
+      "pattern_score": null
+    }
+  ]
+}

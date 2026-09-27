@@ -74,3 +74,7 @@ python scripts/export_sft_jsonl.py --out data/sft.jsonl
 可以说：业务助手型 Agent；主循环手写；手册是分页检索，扫描页有 OCR；实验数字仍由确定性工具算。异步是 FastAPI 入口 + 线程池，不是高并发。
 
 不能说：已上线、微服务、微调提升了准确率、没跑过的准确率、PaddleOCR 或视觉大模型已经接入、Chroma/Milvus 已在默认路径、生产用 LangGraph。
+
+## PDF Agent
+
+PDF Agent 在子目录 [pdf-agent/](pdf-agent/)。用法见 [pdf-agent/USAGE.md](pdf-agent/USAGE.md)。

@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+.pytest_cache/
+btom_pdf_agent/glyphs.png
+examples/eval/
+examples/attention.png
+examples/grid.png
+examples/demo.pdf
+*.json.bak
+.env
+*.safetensors
+pytorch_model.bin
+chroma.sqlite3
+runs/
